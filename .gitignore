@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+.env.local
+.vercel
+coverage/
+*.log
+tmp/
+.DS_Store
+.arena/
+packages/backend/assets/photos/.cache

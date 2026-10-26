@@ -1,0 +1,28 @@
+# Despliegue recomendado: un único servicio web de Node que compila la web y
+# sirve la API + frontend desde el mismo origen (sin problemas de CORS).
+#
+# Render → New → Blueprint → selecciona este repositorio.
+services:
+  - type: web
+    name: velora-api
+    runtime: node
+    plan: free
+    region: oregon
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.3
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_FRONTEND
+        value: 'true'
+      # Configura estos valores en el panel de Render (no se guardan en Git):
+      - key: CORS_ORIGINS
+        sync: false
+      - key: VELORA_API_KEY
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
