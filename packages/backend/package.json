@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/dev.ts",
     "build": "node scripts/build.mjs",
-    "build:vercel": "node scripts/build.mjs --vercel",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
