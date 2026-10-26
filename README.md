@@ -8,7 +8,8 @@ federadas, descargas seguras y utilidades para desarrolladores.
 > plantillas originales, 6 categorías, 29 tests automatizados y build de producción verificado en
 > local. No se ha desplegado en Render ni en Vercel desde este entorno; las instrucciones y los
 > archivos de configuración están incluidos y son los que se usaron para probar el arranque en modo
-> producción (`NODE_ENV=production node dist/server.js`).
+> producción (`NODE_ENV=production node dist/server.js`). El `vercel.json` usa el modo **services**
+> (backend + frontend en un solo proyecto) y se validó contra el esquema oficial de Vercel.
 
 <table>
 <tr><td><b>Endpoints</b></td><td><b>Canvas</b></td><td><b>Categorías</b></td><td><b>Tests</b></td></tr>
@@ -127,8 +128,8 @@ se cuenta y se puede probar.
 │   ├── openapi.json               # OpenAPI 3.1 generado
 │   ├── openapi.yaml
 │   └── ENDPOINTS.md               # tabla navegable del catálogo
-├── render.yaml
-├── vercel.json
+├── render.yaml                    # Render: un solo servicio (web + API)
+├── vercel.json                    # Vercel: servicios backend + frontend
 ├── .env.example
 └── README.md
 ```
@@ -209,9 +210,9 @@ o un gestor como `direnv`.
 | `ALLOW_PRIVATE_TARGETS` | `false` | Solo pruebas con mocks locales; nunca en producción. |
 | `UPLOAD_MAX_BYTES` | `8 MB` | Tamaño máximo de archivos subidos. |
 | `CACHE_PROVIDER_TTL_MS` | `300000` | TTL de la caché de proveedores. |
-| `SERVE_FRONTEND` | `true` | Sirve la web compilada (modo Render de un servicio). |
+| `SERVE_FRONTEND` | `true` (false con `VERCEL`) | Sirve la web compilada (modo Render de un servicio). |
 | `FRONTEND_DIR` / `ASSETS_DIR` | rutas del repo | Rutas explícitas si el layout cambia. |
-| `VITE_API_URL` | vacío | URL absoluta de la API cuando la web se despliega aparte. |
+| `VITE_API_URL` | vacío | Solo para desplegar la web separada de la API. **No** se define en Vercel services: la web usa rutas relativas. |
 | `OPENAPI_SERVER_URL` | `http://localhost:4000` | Servidor que se escribe en el OpenAPI generado. |
 
 > **Nunca** pongas `VELORA_API_KEY` ni `GITHUB_TOKEN` en variables `VITE_*`: todo lo que empieza por
@@ -456,24 +457,56 @@ Notas para el plan gratuito: el servicio se suspende por inactividad (primer arr
 memoria es limitada y **no hay disco persistente**. Por eso las notas y la caché viven en memoria y
 se reinician con cada despliegue. Los canvas y descargas no necesitan disco.
 
-### Vercel (frontend estático + API en Render)
+### Vercel (proyecto con dos servicios)
 
-`vercel.json` compila solo la web y reescribe las rutas de la SPA:
+El `vercel.json` de la raíz usa el modo **services** de Vercel: un solo proyecto, dos servicios y un
+único dominio.
 
-```bash
-vercel --prod
-# Variable de entorno en Vercel:
-VITE_API_URL=https://tu-api.onrender.com
-```
+| Servicio | Raíz | Framework | Build | Papel |
+| --- | --- | --- | --- | --- |
+| `backend` | `packages/backend` | `express` | `npm run build` → `dist/vercel.js`, entrypoint `api/index.mjs` | API interna, expuesta solo bajo `/api/*` |
+| `frontend` | `packages/frontend` | `vite` | `npm run build` → `dist` | web pública en `/` |
 
-Con `VITE_API_URL` el navegador llama directamente a Render. Configura en Render
-`CORS_ORIGINS=https://tu-app.vercel.app`.
+Enrutado público (de lo más específico a lo más general):
 
-**¿Y la API entera en Vercel?** Es posible montar el handler `src/vercel.ts` como función, pero no
-es la ruta recomendada: el límite de ejecución (~10 s en Hobby) es insuficiente para canvas
-grandes o descargas lentas, y los binarios nativos (`sharp`, `@resvg/resvg-js`) requieren incluirlos
-en el bundle (`includeFiles`). No se ha probado ese despliegue desde este entorno, así que no se
-afirma que funcione; para producción se recomienda Render.
+1. `/api/(.*)` y `/api` → servicio `backend`. La ruta se conserva, y la API ya está montada bajo `/api`.
+2. `/assets/(.*)`, `/favicon.svg` y `/og-banner.jpg` → servicio `frontend` (estáticos con hash).
+3. `/(.*)` → servicio `frontend` seleccionando `/index.html`, que es el fallback de la SPA: rutas como
+   `/endpoints`, `/canvas` o `/e/anime.search` se recargan sin 404.
+
+Pasos:
+
+1. Importa el repositorio en Vercel y **no** definas Root Directory ni Framework Preset: el
+   `vercel.json` de la raíz describe los dos servicios.
+2. **No** definas `VITE_API_URL` ni `VITE_API_TARGET`. La web llama a rutas relativas (`/api/...`) y
+   Vercel las enruta al servicio backend en el mismo dominio, así que no hay CORS de por medio.
+3. Variables opcionales del proyecto: `VELORA_API_KEY`, `GITHUB_TOKEN`, `CORS_ORIGINS` (solo si vas a
+   llamar a la API desde otro origen), `RATE_LIMIT_MAX`, `RATE_LIMIT_IMAGE_MAX`.
+4. Deploy. Vercel instala el monorepo con npm workspaces y compila cada servicio por separado.
+
+Detalles técnicos de esta configuración:
+
+- El `entrypoint` del backend es `api/index.mjs`, un archivo que **sí** está en el repositorio
+  (Vercel resuelve el entrypoint antes de compilar y rechaza rutas que aún no existen). Ese archivo
+  reexporta `dist/vercel.js`, el handler que genera `npm run build` con esbuild.
+- `SERVE_FRONTEND` se desactiva automáticamente cuando existe `VERCEL`: el servicio backend no intenta
+  servir la web, porque de eso se encarga el servicio `frontend`.
+- Las 38 plantillas, las fuentes y las fotos viajan con la función gracias a
+  `functions["dist/vercel.js"].includeFiles = "assets/**"`. En tiempo de ejecución el backend busca
+  `assets/` en varias rutas (`ASSETS_DIR`, `cwd`, la ruta del bundle), así que funciona igual en local,
+  en Render y dentro de la función.
+- `maxDuration: 30` y `memory: 1024` para el backend. En el plan Hobby el máximo real de ejecución
+  puede ser menor; las descargas grandes o los canvas más pesados pueden agotarlo.
+- `sharp` y `@resvg/resvg-js` son módulos nativos: el build los deja externos y Vercel los incluye
+  desde `node_modules` (linux-x64). Si el empaquetado fallara, Render sigue siendo la alternativa.
+- **Sin bindings**: el servicio `frontend` es estático y habla con la API desde el navegador a través
+  del rewrite público `/api`, no desde el servidor. Un binding solo inyectaría la URL interna del
+  backend como variable de entorno de una función, y aquí no habría ningún proceso servidor que la
+  leyera.
+
+> **No se ejecutó `vercel deploy` desde este entorno.** La configuración se validó contra el esquema
+> oficial de Vercel y los dos builds se compilaron en local, pero no hay una URL pública ni un
+> despliegue real que mostrar. Tampoco se probó `vercel dev`.
 
 ### Docker (opcional)
 
@@ -627,7 +660,8 @@ curl -s "http://localhost:4000/api/search/emoji?q=fire&limit=2"
 | `No se encontró la carpeta de assets` | Ejecuta desde la raíz del repo o define `ASSETS_DIR` con la ruta absoluta a `packages/backend/assets`. |
 | `/api/health` devuelve 503 | Falta alguna plantilla o fuente. `checks` indica cuál. Ejecuta `npm run templates`. |
 | Los endpoints de anime devuelven 502 | El proveedor no responde desde tu red. Comprueba `/api/download/providers`. El elenco local (`waifu`, `maid`, `gacha`, `character/random`) sigue funcionando. |
-| La web no carga `/api` en Vercel | Falta `VITE_API_URL` o la API no permite el origen. Configura ambos. |
+| En Vercel, `/api/...` devuelve HTML de la SPA | Falta el rewrite `/api/(.*)` o el nombre del servicio backend no coincide con `services`. Revisa `vercel.json` y los logs del servicio. |
+| En Vercel, `/api/health` devuelve 503 y `checks.assets` falla | El servicio no recibió `assets/`: revisa que `functions["api/index.mjs"].includeFiles` sea `assets/**` y que el entrypoint configurado sea el mismo. |
 | `CORS` bloqueado | Añade el origen exacto (con `https://`) a `CORS_ORIGINS` y redeploy. |
 | El canvas devuelve 422 | Falta un parámetro obligatorio o el valor no cumple el tipo. El detalle indica el campo. |
 | `sharp` no carga en Alpine | Usa una imagen con glibc (`node:22-slim`) o reinstala dependencias dentro de la imagen final. |

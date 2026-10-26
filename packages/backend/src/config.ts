@@ -99,8 +99,14 @@ export const config = {
     duckduckgo: process.env.DUCKDUCKGO_BASE_URL ?? 'https://html.duckduckgo.com',
   },
 
-  /** Sirve el frontend compilado (Render / ejecución local de producción). */
-  serveFrontend: bool(process.env.SERVE_FRONTEND, true),
+  /**
+   * Sirve el frontend compilado desde Express (Render y producción local).
+   * En Vercel cada servicio se despliega por separado: la web la sirve el
+   * servicio `frontend`, así que aquí queda desactivado por defecto.
+   */
+  serveFrontend: bool(process.env.SERVE_FRONTEND, !process.env.VERCEL),
+  /** `true` cuando el proceso corre dentro de una función de Vercel. */
+  isVercel: Boolean(process.env.VERCEL),
   frontendDir: process.env.FRONTEND_DIR ?? path.resolve(PACKAGE_ROOT, '../frontend/dist'),
 
   assetsDir: process.env.ASSETS_DIR ?? path.resolve(PACKAGE_ROOT, 'assets'),

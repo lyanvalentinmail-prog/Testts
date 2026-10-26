@@ -11,7 +11,7 @@ import { apiRouter } from './routes/index.js';
  *
  * Se usa en tres contextos:
  *   · `src/server.ts`      → servidor Node en Render o local (sirve la web).
- *   · `api/index.mjs`      → función serverless en Vercel.
+ *   · `src/vercel.ts`      → servicio `backend` de Vercel (dist/vercel.js).
  *   · pruebas              → instancia en memoria con supertest-like fetch.
  */
 export function createApp(): Express {

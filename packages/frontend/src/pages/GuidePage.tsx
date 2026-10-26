@@ -13,7 +13,11 @@ import {
   Wrench,
 } from 'lucide-react';
 import { CodeBlock } from '../components/CodeBlock';
+import { API_BASE } from '../lib/api';
 import { STATS } from '@velora/shared';
+
+/** Origen usado en los ejemplos: el de este despliegue, no localhost. */
+const BASE = API_BASE || (typeof window === 'undefined' ? '' : window.location.origin);
 
 const SECCIONES = [
   { id: 'inicio', label: 'Inicio rápido' },
@@ -90,13 +94,13 @@ export function GuidePage() {
             language="bash"
             filename="primera-peticion.sh"
             code={`# Lista los canvas disponibles
-curl -s http://localhost:4000/api/canvas | jq
+curl -s ${BASE}/api/canvas | jq
 
 # Genera una imagen PNG con una plantilla real
-curl -s "http://localhost:4000/api/canvas/brat?text=Hola%20Velora&formato=png" -o brat.png
+curl -s "${BASE}/api/canvas/brat?text=Hola%20Velora&formato=png" -o brat.png
 
 # Consulta el catálogo completo
-curl -s "http://localhost:4000/api/endpoints?category=anime&limit=5" | jq`}
+curl -s "${BASE}/api/endpoints?category=anime&limit=5" | jq`}
           />
           <div className="flex flex-wrap gap-1.5">
             {['/api/health', '/api/endpoints', '/api/categories', '/api/canvas', '/api/download/qr?data=hola'].map((path) => (
@@ -175,7 +179,7 @@ curl -s "http://localhost:4000/api/endpoints?category=anime&limit=5" | jq`}
           <CodeBlock
             language="bash"
             filename="con-api-key.sh"
-            code={`curl -s http://localhost:4000/api/endpoints \\
+            code={`curl -s ${BASE}/api/endpoints \\
   -H "X-API-Key: $VELORA_API_KEY"`}
           />
           <p className="text-[12.5px] text-muted">
@@ -228,13 +232,13 @@ curl -s "http://localhost:4000/api/endpoints?category=anime&limit=5" | jq`}
             <CodeBlock
               language="bash"
               filename="canvas-por-url.sh"
-              code={`curl -s "http://localhost:4000/api/canvas/brat?text=Hola&formato=webp" -o hola.webp`}
+              code={`curl -s "${BASE}/api/canvas/brat?text=Hola&formato=webp" -o hola.webp`}
               maxHeight="10rem"
             />
             <CodeBlock
               language="bash"
               filename="canvas-con-archivo.sh"
-              code={`curl -s "http://localhost:4000/api/canvas/minions?text=banana" \\
+              code={`curl -s "${BASE}/api/canvas/minions?text=banana" \\
   -F "image=@cara1.png" -F "image2=@cara2.png" \\
   -o minions.png`}
               maxHeight="10rem"
@@ -320,17 +324,18 @@ npm start                # node packages/backend/dist/server.js`}
               <Cloud className="size-4 text-sky-300" /> Vercel
             </h3>
             <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
-              La opción verificable es desplegar el frontend como sitio estático y apuntarlo a la API de Render con{' '}
-              <code className="font-mono text-ink-soft">VITE_API_URL</code>. El <code className="font-mono text-ink-soft">vercel.json</code> incluido
-              ya configura el build y las reescrituras de SPA.
+              El <code className="font-mono text-ink-soft">vercel.json</code> usa el modo <span className="text-ink-soft">services</span>: dos
+              servicios ({' '}<code className="font-mono text-ink-soft">backend</code> y <code className="font-mono text-ink-soft">frontend</code>) en un mismo
+              proyecto y dominio. <code className="font-mono text-ink-soft">/api/*</code> se enruta al backend y el resto al frontend, así que
+              no hace falta <code className="font-mono text-ink-soft">VITE_API_URL</code>: la web llama a rutas relativas.
             </p>
             <ul className="mt-2 list-inside list-disc space-y-1 text-[12px] text-muted">
-              <li>Build: <code className="font-mono text-ink-soft">npm run build:web</code> · salida: <code className="font-mono text-ink-soft">packages/frontend/dist</code>.</li>
-              <li>Variable de entorno: <code className="font-mono text-ink-soft">VITE_API_URL=https://tu-api.onrender.com</code>.</li>
+              <li>Build por servicio: backend <code className="font-mono text-ink-soft">npm run build</code> → <code className="font-mono text-ink-soft">dist/vercel.js</code> · frontend <code className="font-mono text-ink-soft">npm run build</code> → <code className="font-mono text-ink-soft">dist</code>.</li>
+              <li>Las plantillas viajan con el backend mediante <code className="font-mono text-ink-soft">includeFiles: assets/**</code>.</li>
               <li>
-                Una función serverless completa (API + frontend en Vercel) es posible, pero tiene límite de 10 s por petición y
-                binarios nativos (<code className="font-mono text-ink-soft">sharp</code>, <code className="font-mono text-ink-soft">@resvg/resvg-js</code>): los canvas pesados y las
-                descargas grandes pueden agotar el tiempo. Para eso se recomienda Render.
+                Límite de ejecución de la plataforma y binarios nativos (<code className="font-mono text-ink-soft">sharp</code>,{' '}
+                <code className="font-mono text-ink-soft">@resvg/resvg-js</code>): para cargas muy grandes Render sigue siendo la opción
+                recomendada. El despliegue en Vercel no se probó desde este entorno.
               </li>
             </ul>
           </div>
